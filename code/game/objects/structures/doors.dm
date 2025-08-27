@@ -55,7 +55,7 @@
 	/// Handle viewport toggle on right click
 	var/has_viewport = FALSE
 	/// Track the last mob that bumped the door for auto-re-locking
-	var/mob/last_bumper = null
+	var/datum/weakref/last_bumper = null
 
 /obj/structure/door/Initialize()
 	. = ..()
@@ -69,6 +69,7 @@
 
 	var/static/list/loc_connections = list(
 		COMSIG_ATOM_MAGICALLY_UNLOCKED = PROC_REF(on_magic_unlock),
+		COMSIG_ATOM_EXIT = PROC_REF(on_exit),
 	)
 	AddElement(/datum/element/connect_loc, loc_connections)
 
@@ -231,8 +232,6 @@
 
 /obj/structure/door/Bumped(atom/movable/AM)
 	. = ..()
-	if(door_opened)
-		return
 	if(obj_broken || switching_states)
 		return
 	if(world.time < last_bump + 20)
@@ -259,10 +258,15 @@
 				user.visible_message(span_warning("The deadite smashes through [src]!"))
 			return
 		if(locked())
-			if(istype(user.get_active_held_item(), /obj/item/key) || istype(user.get_active_held_item(), /obj/item/storage/keyring))
-				user.visible_message(span_warning("[user] fumbles with their keys..."), \
-					span_notice("I fumble with my keys..."))
-				addtimer(CALLBACK(src, PROC_REF(autobump), user), 5)
+			var/obj/item/held = user.get_active_held_item()
+			if(istype(held, /obj/item/key) && held?.has_access() || istype(held, /obj/item/storage/keyring) && held.has_access())
+				user.visible_message(
+					span_warning("[user] fumbles with \the [held]..."),
+					span_notice("I fumble with my \the [held]...")
+				)
+				if(do_after(user, 0.5 SECONDS, src))
+					bump_unlock(user, held)
+					return
 			rattle()
 			return
 		if(TryToSwitchState(AM))
@@ -274,15 +278,14 @@
 				else
 					addtimer(CALLBACK(src, PROC_REF(Close), FALSE), delay)
 
-/obj/structure/door/proc/autobump(mob/user)
-	var/obj/item/key_item = user.get_active_held_item()
-	last_bumper = user
-	src.attackby(key_item, user)
-	if(!locked())
-		src.Open(TRUE)
-		addtimer(CALLBACK(src, PROC_REF(Close), TRUE, TRUE), 25)
+/obj/structure/door/proc/bump_unlock(mob/user, obj/item/key)
+	if(!key)
 		return
-	last_bumper = null
+	last_bumper = WEAKREF(user)
+	attackby(key, user)
+	if(!locked())
+		Open()
+		return
 
 /obj/structure/door/CanAStarPass(ID, to_dir, datum/requester)
 	. = ..()
@@ -380,11 +383,8 @@
 	switching_states = FALSE
 	air_update_turf(TRUE)
 
-/obj/structure/door/proc/Close(silent = FALSE, autobump = FALSE)
+/obj/structure/door/proc/Close(silent = FALSE)
 	if(switching_states || !door_opened)
-		return
-	if(autobump && !src.Adjacent(last_bumper))
-		last_bumper = null
 		return
 	for(var/mob/living/L in get_turf(src))
 		return
@@ -401,12 +401,6 @@
 	update_appearance(UPDATE_ICON_STATE)
 	switching_states = FALSE
 	air_update_turf(TRUE)
-
-	if(autobump && last_bumper && src.Adjacent(last_bumper))
-		var/datum/lock/key/keylock = lock
-		if(istype(last_bumper.get_active_held_item(), /obj/item/key) || istype(last_bumper.get_active_held_item(), /obj/item/storage/keyring))
-			keylock.attack_wrap(src, last_bumper.get_active_held_item(), last_bumper, list(RIGHT_CLICK = "1"))
-		last_bumper = null
 
 /obj/structure/door/proc/force_closed()
 	switching_states = TRUE
@@ -586,6 +580,33 @@
 
 	INVOKE_ASYNC(src, PROC_REF(unlock))
 	INVOKE_ASYNC(src, PROC_REF(force_open))
+
+/// Signal proc for [COMSIG_ATOM_EXIT]. Close the door when someone crosses it after bump.
+/obj/structure/door/proc/on_exit(datum/source, atom/movable/exited)
+	SIGNAL_HANDLER
+
+	if(!isliving(exited))
+		return
+	var/mob/living/L = exited
+	if(last_bumper?.resolve() != L) // If the last bumper is not player or if there just is no last bumper
+		return
+
+	addtimer(CALLBACK(src, PROC_REF(close_adjacent), L), 1.5 SECONDS) // Adjacency check for closing, leave open if bumper left
+	last_bumper = null
+
+/obj/structure/door/proc/close_adjacent(mob/living/bumper)
+	if(!Adjacent(bumper))
+		return
+	Close()
+	addtimer(CALLBACK(src, PROC_REF(lock_adjacent), bumper), 1 SECONDS) // Adjacency check for locking, closed but unlocked if the player didn't wait for the animation
+
+/obj/structure/door/proc/lock_adjacent(mob/living/bumper)
+	if(!Adjacent(bumper))
+		return
+	var/obj/item/held = bumper.get_active_held_item()
+	if(!istype(held, /obj/item/key) && !istype(held, /obj/item/storage/keyring))
+		return
+	attackby_secondary(held, bumper, "right=1")
 
 /obj/structure/door/abyss
 	name = "abyssal door"
