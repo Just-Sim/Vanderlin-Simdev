@@ -259,7 +259,7 @@
 			return
 		if(locked())
 			var/obj/item/held = user.get_active_held_item()
-			if(istype(held, /obj/item/key) && held?.has_access() || istype(held, /obj/item/storage/keyring) && held.has_access())
+			if(held?.has_access())
 				user.visible_message(
 					span_warning("[user] fumbles with \the [held]..."),
 					span_notice("I fumble with my \the [held]...")
@@ -285,7 +285,6 @@
 	attackby(key, user)
 	if(!locked())
 		Open()
-		return
 
 /obj/structure/door/CanAStarPass(ID, to_dir, datum/requester)
 	. = ..()
@@ -598,13 +597,13 @@
 	if(!Adjacent(bumper))
 		return
 	Close()
-	addtimer(CALLBACK(src, PROC_REF(lock_adjacent), bumper), 1 SECONDS) // Adjacency check for locking, closed but unlocked if the player didn't wait for the animation
+	addtimer(CALLBACK(src, PROC_REF(lock_adjacent), bumper), animate_time + 0.1 SECONDS) // Adjacency check for locking, closed but unlocked if the player didn't wait for the animation
 
 /obj/structure/door/proc/lock_adjacent(mob/living/bumper)
 	if(!Adjacent(bumper))
 		return
 	var/obj/item/held = bumper.get_active_held_item()
-	if(!istype(held, /obj/item/key) && !istype(held, /obj/item/storage/keyring))
+	if(!held?.has_access())
 		return
 	attackby_secondary(held, bumper, "right=1")
 
