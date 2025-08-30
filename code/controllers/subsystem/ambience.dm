@@ -118,7 +118,7 @@ SUBSYSTEM_DEF(ambience)
 		return
 
 	var/area/my_area = get_area(src)
-	var/vol = client.prefs?.musicvol || 50
+	var/vol = client.prefs?.musicvol
 	var/used = buzz_to_use
 
 	if(!used)
@@ -131,7 +131,7 @@ SUBSYSTEM_DEF(ambience)
 	else if(HAS_TRAIT(src, TRAIT_DRUQK))
 		used = 'sound/music/spice.ogg'
 
-	if(!used)
+	if(!used || vol >= 0)
 		cancel_looping_ambience()
 		return
 
@@ -139,7 +139,7 @@ SUBSYSTEM_DEF(ambience)
 		return
 
 	client.current_ambient_sound = used
-	SEND_SOUND(src, sound(used, repeat = 1, wait = 0, volume = (client.prefs?.musicvol), channel = CHANNEL_BUZZ))
+	SEND_SOUND(src, sound(used, repeat = 1, wait = 0, volume = vol, channel = CHANNEL_BUZZ))
 
 /mob/proc/cancel_looping_ambience()
 	if(!client)
