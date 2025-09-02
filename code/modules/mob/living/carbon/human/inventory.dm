@@ -390,6 +390,12 @@
 		if(equip_to_slot_if_possible(thing, slot_id))
 			update_inv_hands()
 		return
+	if(istype(equipped_back, /obj/item/storage/backpack/backpack))
+		if(thing)
+			to_chat(src, span_warning("I need to take my backpack off first"))
+			return
+		equipped_back.attack_hand(src)
+		return
 	if(!SEND_SIGNAL(equipped_back, COMSIG_CONTAINS_STORAGE)) // not a storage item
 		if(!thing)
 			equipped_back.attack_hand(src)
