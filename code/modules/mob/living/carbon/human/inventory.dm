@@ -390,11 +390,12 @@
 		if(equip_to_slot_if_possible(thing, slot_id))
 			update_inv_hands()
 		return
+	// Since you have to take off /obj/item/storage/backpack/backpack to access the inventory we handle it differently:
 	if(istype(equipped_back, /obj/item/storage/backpack/backpack))
-		if(thing)
+		if(thing) // Check for held item, if there is one, don't let them insert it in the backpack
 			to_chat(src, span_warning("I need to take my backpack off first"))
 			return
-		equipped_back.attack_hand(src)
+		equipped_back.attack_hand(src) // If there is no held item, take off the backpack by invoking attack_hand
 		return
 	if(!SEND_SIGNAL(equipped_back, COMSIG_CONTAINS_STORAGE)) // not a storage item
 		if(!thing)
